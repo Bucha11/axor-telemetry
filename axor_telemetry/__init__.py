@@ -14,7 +14,7 @@ Public surface:
 from axor_telemetry.embedder import MinHashEmbedder
 from axor_telemetry.sinks.file_sink import FileTelemetrySink
 from axor_telemetry.sinks.http_sink import HTTPTelemetrySink
-from axor_telemetry.pipeline import TelemetryPipeline
+from axor_telemetry.pipeline import TelemetryPipeline, build_pipeline
 from axor_telemetry.config import TelemetryConfig, TelemetryMode
 
 __version__ = "0.1.0"
@@ -24,6 +24,7 @@ __all__ = [
     "FileTelemetrySink",
     "HTTPTelemetrySink",
     "TelemetryPipeline",
+    "build_pipeline",
     "TelemetryConfig",
     "TelemetryMode",
     "__version__",
