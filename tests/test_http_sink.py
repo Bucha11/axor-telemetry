@@ -97,3 +97,109 @@ async def test_partial_success_preserves_tail(tmp_path):
 
     remaining = sink.queue_path.read_text().splitlines()
     assert len(remaining) == 3
+
+
+async def test_post_batch_success_via_mocked_urlopen(tmp_path):
+    """Exercise the real urllib path, intercepted at urlopen level."""
+    import urllib.request
+    sink = HTTPTelemetrySink(
+        endpoint="https://example.invalid/v1/records",
+        queue_path=str(tmp_path / "q.jsonl"),
+        axor_version="0.3.0",
+    )
+
+    class _FakeResp:
+        status = 204
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["data"] = req.data
+        captured["ua"] = req.headers.get("User-agent")
+        return _FakeResp()
+
+    with patch.object(urllib.request, "urlopen", side_effect=fake_urlopen):
+        await sink.send([_record()])
+
+    assert captured["url"] == "https://example.invalid/v1/records"
+    assert b"focused_generative" in captured["data"]
+    assert "axor-telemetry/0.3.0" == captured["ua"]
+    assert not sink.queue_path.exists()
+
+
+async def test_post_batch_returns_false_on_urlerror(tmp_path):
+    import urllib.error
+    import urllib.request
+    sink = HTTPTelemetrySink(
+        endpoint="https://example.invalid/v1/records",
+        queue_path=str(tmp_path / "q.jsonl"),
+    )
+
+    def _raise(*a, **kw):
+        raise urllib.error.URLError("connection refused")
+
+    with patch.object(urllib.request, "urlopen", side_effect=_raise):
+        await sink.send([_record()])
+
+    # Record remains queued for next-start retry.
+    assert sink.queue_path.read_text().count("\n") == 1
+
+
+async def test_post_batch_returns_false_on_5xx(tmp_path):
+    import urllib.request
+    sink = HTTPTelemetrySink(
+        endpoint="https://example.invalid/v1/records",
+        queue_path=str(tmp_path / "q.jsonl"),
+    )
+
+    class _Fail:
+        status = 502
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+
+    with patch.object(urllib.request, "urlopen", return_value=_Fail()):
+        await sink.send([_record()])
+
+    assert sink.queue_path.is_file()
+    assert sink.queue_path.read_text().count("\n") == 1
+
+
+async def test_flush_with_empty_queue_is_noop(tmp_path):
+    sink = HTTPTelemetrySink(
+        endpoint="https://example.invalid/v1/records",
+        queue_path=str(tmp_path / "q.jsonl"),
+    )
+    await sink.flush()  # must not raise
+    assert not sink.queue_path.exists()
+
+
+async def test_wire_record_helper(tmp_path):
+    from axor_telemetry.sinks.http_sink import wire_record
+    rec = _record(signal="focused_generative")
+    wire = wire_record(rec, axor_version="0.9.0")
+    assert wire["signal_chosen"] == "focused_generative"
+    assert wire["axor_version"] == "0.9.0"
+
+
+async def test_aclose_flushes_and_closes(tmp_path):
+    import urllib.request
+    sink = HTTPTelemetrySink(
+        endpoint="https://example.invalid/v1/records",
+        queue_path=str(tmp_path / "q.jsonl"),
+    )
+    # Prime failures so queue has content
+    with patch.object(sink, "_post_batch", return_value=False):
+        await sink.send([_record()])
+
+    # Now let aclose drain successfully
+    class _Ok:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+    with patch.object(urllib.request, "urlopen", return_value=_Ok()):
+        await sink.aclose()
+
+    assert not sink.queue_path.exists()

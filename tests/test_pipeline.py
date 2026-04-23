@@ -129,3 +129,96 @@ async def test_build_pipeline_local_uses_file_sink(tmp_path):
     )
     assert p.enabled is True
     assert isinstance(p._sink, FileTelemetrySink)
+
+
+async def test_build_pipeline_remote_uses_http_sink(tmp_path):
+    from axor_telemetry.sinks.http_sink import HTTPTelemetrySink
+    p = build_pipeline(
+        config=TelemetryConfig(
+            mode=TelemetryMode.REMOTE,
+            endpoint="https://example.invalid/v1/records",
+            queue_path=str(tmp_path / "q.jsonl"),
+        )
+    )
+    assert p.enabled is True
+    assert isinstance(p._sink, HTTPTelemetrySink)
+
+
+async def test_pipeline_aclose_calls_sink_aclose():
+    class TrackedSink:
+        def __init__(self):
+            self.aclose_called = False
+            self.flushed = 0
+        async def send(self, records): pass
+        async def flush(self): self.flushed += 1
+        async def aclose(self): self.aclose_called = True
+
+    sink = TrackedSink()
+    p = TelemetryPipeline(embedder=None, sink=sink,
+                          config=TelemetryConfig(mode=TelemetryMode.LOCAL))
+    await p.aclose()
+    assert sink.flushed >= 1
+    assert sink.aclose_called is True
+
+
+async def test_pipeline_aclose_without_aclose_method():
+    class NoAcloseSink:
+        async def send(self, records): pass
+        async def flush(self): pass
+
+    p = TelemetryPipeline(embedder=None, sink=NoAcloseSink(),
+                          config=TelemetryConfig(mode=TelemetryMode.LOCAL))
+    # Must not raise when sink lacks aclose.
+    await p.aclose()
+
+
+async def test_ingest_trace_no_signal_event_is_noop():
+    sink_calls = []
+    class S:
+        async def send(self, records): sink_calls.append(records)
+        async def flush(self): pass
+
+    p = TelemetryPipeline(embedder=MinHashEmbedder(), sink=S(),
+                          config=TelemetryConfig(mode=TelemetryMode.LOCAL))
+
+    class FakeTrace:
+        events = []  # no signal_chosen → no record emitted
+
+    await p.ingest_trace(FakeTrace())
+    assert sink_calls == []
+
+
+async def test_ingest_trace_when_disabled_is_noop():
+    p = TelemetryPipeline(embedder=None, sink=None,
+                          config=TelemetryConfig(mode=TelemetryMode.OFF))
+    class FakeTrace: events = []
+    # No exception, no-op.
+    await p.ingest_trace(FakeTrace())
+
+
+async def test_fallback_record_used_when_core_unavailable(monkeypatch):
+    """Force ImportError path in _make_record to cover _FallbackRecord branch."""
+    from axor_telemetry import pipeline as pmod
+    import sys, builtins
+
+    # Force ImportError when code tries to import axor_core.contracts.trace
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **kw):
+        if name.startswith("axor_core"):
+            raise ImportError("axor-core hidden in test")
+        return real_import(name, *a, **kw)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    rec = pmod._make_record(
+        signal="focused_generative",
+        classifier_used="heuristic",
+        confidence=0.5,
+        tokens_spent=0,
+        policy_adjusted=False,
+        embedding=None,
+        fingerprint_kind="",
+    )
+    assert isinstance(rec, pmod._FallbackRecord)
+    assert rec.signal_chosen == "focused_generative"
