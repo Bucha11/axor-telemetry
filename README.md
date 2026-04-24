@@ -39,7 +39,7 @@ Config lives at `~/.axor/config.toml` under `[telemetry]`.
 |----------|----------|
 | `off`    | Default. Pipeline does nothing. |
 | `local`  | Writes to `~/.axor/telemetry_queue.jsonl`. Never sent anywhere. |
-| `remote` | Writes local queue + ships batches to `telemetry.axor.dev/v1/records`. Retry-on-next-start if offline. |
+| `remote` | Writes local queue + ships batches to `telemetry.useaxor.net/v1/records`. Retry-on-next-start if offline. |
 
 ## Programmatic usage
 

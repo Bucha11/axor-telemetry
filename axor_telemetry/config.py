@@ -16,7 +16,7 @@ from pathlib import Path
 
 _CONFIG_PATH = Path("~/.axor/config.toml").expanduser()
 _DEFAULT_QUEUE = "~/.axor/telemetry_queue.jsonl"
-_DEFAULT_ENDPOINT = "https://telemetry.axor.dev/v1/records"
+_DEFAULT_ENDPOINT = "https://telemetry.useaxor.net/v1/records"
 
 
 class TelemetryMode(str, Enum):
