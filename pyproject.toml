@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "axor-telemetry"
-version = "0.1.0"
+version = "0.2.0"
 description = "Anonymous telemetry pipeline for axor-core: MinHash embedder, local/HTTP sinks, opt-in consent CLI"
 readme = "README.md"
 license = { text = "MIT" }
@@ -23,8 +23,8 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-core = ["axor-core>=0.3.0"]
-dev  = ["pytest>=8.0", "pytest-asyncio>=0.23", "axor-core>=0.3.0"]
+core = ["axor-core>=0.3.0,<0.5"]
+dev  = ["pytest>=8.0", "pytest-asyncio>=0.23", "axor-core>=0.3.0,<0.5"]
 
 [project.urls]
 Repository  = "https://github.com/Bucha11/axor-telemetry"

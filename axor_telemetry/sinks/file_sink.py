@@ -8,7 +8,6 @@ Serves two roles:
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import threading
@@ -56,7 +55,10 @@ class FileTelemetrySink:
             json.dumps(record_to_wire(r, self._axor_version), separators=(",", ":"))
             for r in records
         ]
-        await asyncio.to_thread(self._append_lines, lines)
+        # Keep the local queue write synchronous. This avoids executor/thread
+        # startup hangs in restricted runtimes while preserving the sink's
+        # "never loses a completed send" behavior.
+        self._append_lines(lines)
 
     async def flush(self) -> None:
         # No persistent handle — every send() already closes after append.

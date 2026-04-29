@@ -11,7 +11,6 @@ Zero runtime deps — uses urllib from the stdlib.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import urllib.error
 import urllib.request
@@ -35,11 +34,13 @@ class HTTPTelemetrySink:
         axor_version: str = "",
         timeout_seconds: float = 10.0,
         batch_size: int = 200,
+        auth_token: str | None = None,
     ) -> None:
         self._endpoint = endpoint
         self._axor_version = axor_version
         self._timeout = timeout_seconds
         self._batch_size = batch_size
+        self._auth_token = auth_token
         self._file_sink = FileTelemetrySink(queue_path=queue_path, axor_version=axor_version)
 
     @property
@@ -63,33 +64,36 @@ class HTTPTelemetrySink:
     # ── Drain loop ──────────────────────────────────────────────────────────
 
     async def _drain_and_ship(self) -> None:
-        records = await asyncio.to_thread(list, self._file_sink.drain())
+        records = list(self._file_sink.drain())
         if not records:
             return
 
         sent = 0
         for batch in _chunks(records, self._batch_size):
-            ok = await asyncio.to_thread(self._post_batch, batch)
+            ok = self._post_batch(batch)
             if not ok:
                 break
             sent += len(batch)
 
         if sent == len(records):
-            await asyncio.to_thread(self._file_sink.truncate)
+            self._file_sink.truncate()
         elif sent > 0:
             # Partial success: rewrite queue with the unsent tail.
-            await asyncio.to_thread(self._rewrite_tail, records[sent:])
+            self._rewrite_tail(records[sent:])
 
     def _post_batch(self, batch: list[dict]) -> bool:
         payload = json.dumps(batch, separators=(",", ":")).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent":   f"axor-telemetry/{self._axor_version or 'unknown'}",
+        }
+        if self._auth_token:
+            headers["X-Axor-Token"] = self._auth_token
         req = urllib.request.Request(
             self._endpoint,
             data=payload,
             method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent":   f"axor-telemetry/{self._axor_version or 'unknown'}",
-            },
+            headers=headers,
         )
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
