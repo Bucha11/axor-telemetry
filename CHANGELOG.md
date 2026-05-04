@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-05-04
+
+### Added
+- `record_decision(..., tool_selection=...)` — optional dict carrying
+  per-run tool-surface stats (`mode`, `offered`, `kept`,
+  `dropped_relevance`, `dropped_denied`). Forwarded through
+  `record_to_wire` as a new `tool_selection` field on the wire payload.
+- `_FallbackRecord.tool_selection` for runs without axor-core installed.
+  When `tool_selection` is provided, `_make_record` always falls back to
+  `_FallbackRecord` (the frozen `AnonymizedTraceRecord` cannot carry the
+  new field yet).
+
+### Notes
+- Server schema (`axor-telemetry-server`) silently ignores the new field
+  on ingest; persistence requires a server-side migration.
+
 ## 0.2.0 — 2026-04-29
 
 ### Added

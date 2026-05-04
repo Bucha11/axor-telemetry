@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "axor-telemetry"
-version = "0.2.0"
+version = "0.3.0"
 description = "Anonymous telemetry pipeline for axor-core: MinHash embedder, local/HTTP sinks, opt-in consent CLI"
 readme = "README.md"
 license = { text = "MIT" }
