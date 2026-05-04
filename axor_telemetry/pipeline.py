@@ -48,6 +48,7 @@ class _FallbackRecord:
     policy_adjusted: bool
     input_embedding: list[float] | None = None
     fingerprint_kind: str = ""
+    tool_selection: dict | None = None
 
 
 def _make_record(
@@ -59,28 +60,36 @@ def _make_record(
     policy_adjusted: bool,
     embedding: list[float] | None,
     fingerprint_kind: str,
+    tool_selection: dict | None = None,
 ) -> Any:
-    try:
-        from axor_core.contracts.trace import AnonymizedTraceRecord
-        return AnonymizedTraceRecord(
-            signal_chosen=signal,
-            classifier_used=classifier_used,
-            confidence=confidence,
-            tokens_spent=tokens_spent,
-            policy_adjusted=policy_adjusted,
-            input_embedding=embedding,
-            fingerprint_kind=fingerprint_kind,
-        )
-    except ImportError:
-        return _FallbackRecord(
-            signal_chosen=signal,
-            classifier_used=classifier_used,
-            confidence=confidence,
-            tokens_spent=tokens_spent,
-            policy_adjusted=policy_adjusted,
-            input_embedding=embedding,
-            fingerprint_kind=fingerprint_kind,
-        )
+    # AnonymizedTraceRecord is a frozen dataclass that does not (yet) carry
+    # tool_selection. When the caller has tool_selection stats we need to
+    # carry them on the record, so fall back to _FallbackRecord — the wire
+    # serializer treats both shapes identically.
+    if tool_selection is None:
+        try:
+            from axor_core.contracts.trace import AnonymizedTraceRecord
+            return AnonymizedTraceRecord(
+                signal_chosen=signal,
+                classifier_used=classifier_used,
+                confidence=confidence,
+                tokens_spent=tokens_spent,
+                policy_adjusted=policy_adjusted,
+                input_embedding=embedding,
+                fingerprint_kind=fingerprint_kind,
+            )
+        except ImportError:
+            pass
+    return _FallbackRecord(
+        signal_chosen=signal,
+        classifier_used=classifier_used,
+        confidence=confidence,
+        tokens_spent=tokens_spent,
+        policy_adjusted=policy_adjusted,
+        input_embedding=embedding,
+        fingerprint_kind=fingerprint_kind,
+        tool_selection=tool_selection,
+    )
 
 
 class TelemetryPipeline:
@@ -109,6 +118,7 @@ class TelemetryPipeline:
         confidence: float,
         tokens_spent: int = 0,
         policy_adjusted: bool = False,
+        tool_selection: dict | None = None,
     ) -> None:
         if not self.enabled:
             return
@@ -130,6 +140,7 @@ class TelemetryPipeline:
             policy_adjusted=policy_adjusted,
             embedding=embedding,
             fingerprint_kind=kind,
+            tool_selection=tool_selection,
         )
         try:
             await self._sink.send([record])

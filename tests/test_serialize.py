@@ -103,6 +103,81 @@ def test_record_to_wire_empty_fingerprint_kind_becomes_none():
     assert wire["fingerprint"] is None
 
 
+def test_record_to_wire_includes_tool_selection_when_present():
+    rec = _FallbackRecord(
+        signal_chosen="focused_generative",
+        classifier_used="heuristic",
+        confidence=0.7,
+        tokens_spent=10,
+        policy_adjusted=False,
+        tool_selection={
+            "mode":              "relevance",
+            "offered":           8,
+            "kept":              3,
+            "dropped_relevance": 4,
+            "dropped_denied":    1,
+        },
+    )
+    wire = record_to_wire(rec)
+    assert wire["tool_selection"] == {
+        "mode":              "relevance",
+        "offered":           8,
+        "kept":              3,
+        "dropped_relevance": 4,
+        "dropped_denied":    1,
+    }
+
+
+def test_record_to_wire_omits_tool_selection_when_absent():
+    rec = _FallbackRecord(
+        signal_chosen="focused_generative",
+        classifier_used="heuristic",
+        confidence=0.5,
+        tokens_spent=0,
+        policy_adjusted=False,
+    )
+    wire = record_to_wire(rec)
+    assert "tool_selection" not in wire
+
+
+def test_record_to_wire_drops_invalid_tool_selection():
+    rec = _FallbackRecord(
+        signal_chosen="focused_generative",
+        classifier_used="heuristic",
+        confidence=0.5,
+        tokens_spent=0,
+        policy_adjusted=False,
+        tool_selection="not a dict",  # type: ignore[arg-type]
+    )
+    wire = record_to_wire(rec)
+    assert "tool_selection" not in wire
+
+
+def test_record_to_wire_clamps_negative_tool_selection_counts():
+    rec = _FallbackRecord(
+        signal_chosen="focused_generative",
+        classifier_used="heuristic",
+        confidence=0.5,
+        tokens_spent=0,
+        policy_adjusted=False,
+        tool_selection={
+            "mode":              "weird-mode",
+            "offered":           -3,
+            "kept":              "2",
+            "dropped_relevance": -1,
+            "dropped_denied":    0,
+        },
+    )
+    wire = record_to_wire(rec)
+    assert wire["tool_selection"] == {
+        "mode":              "none",
+        "offered":           0,
+        "kept":              2,
+        "dropped_relevance": 0,
+        "dropped_denied":    0,
+    }
+
+
 def test_record_to_wire_coerces_numeric_types():
     """tokens_spent stored as int even if passed as float-like."""
     class Weird:

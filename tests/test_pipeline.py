@@ -48,6 +48,34 @@ async def test_pipeline_local_sends_with_embedding():
     assert len(rec.input_embedding) == 128
 
 
+async def test_pipeline_passes_tool_selection_through_to_record():
+    sink = _CaptureSink()
+    p = TelemetryPipeline(embedder=None, sink=sink,
+                          config=TelemetryConfig(mode=TelemetryMode.LOCAL))
+    await p.record_decision(
+        raw_input="describe the schema",
+        signal="focused_readonly",
+        classifier_used="heuristic",
+        confidence=0.6,
+        tool_selection={
+            "mode":              "relevance",
+            "offered":           5,
+            "kept":              2,
+            "dropped_relevance": 3,
+            "dropped_denied":    0,
+        },
+    )
+    rec = sink.batches[0][0]
+    # Whether axor-core is installed or not, the record carries tool_selection.
+    assert getattr(rec, "tool_selection", None) == {
+        "mode":              "relevance",
+        "offered":           5,
+        "kept":              2,
+        "dropped_relevance": 3,
+        "dropped_denied":    0,
+    }
+
+
 async def test_pipeline_tolerates_embedder_failure():
     class BadEmbedder:
         kind = "broken_v1"

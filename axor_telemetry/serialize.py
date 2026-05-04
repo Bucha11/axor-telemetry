@@ -29,7 +29,7 @@ def record_to_wire(record: Any, axor_version: str = "") -> dict:
     if fingerprint is not None:
         fingerprint_int = [int(x) for x in fingerprint]
 
-    return {
+    wire: dict = {
         "signal_chosen":    signal_key,
         "classifier_used":  getattr(record, "classifier_used", ""),
         "confidence":       float(getattr(record, "confidence", 0.0)),
@@ -39,6 +39,43 @@ def record_to_wire(record: Any, axor_version: str = "") -> dict:
         "fingerprint_kind": getattr(record, "fingerprint_kind", "") or "none",
         "axor_version":     axor_version,
         "schema_version":   1,
+    }
+
+    tool_selection = _normalize_tool_selection(
+        getattr(record, "tool_selection", None)
+    )
+    if tool_selection is not None:
+        wire["tool_selection"] = tool_selection
+    return wire
+
+
+_TOOL_SELECTION_MODES = ("none", "relevance")
+
+
+def _normalize_tool_selection(value: Any) -> dict | None:
+    """Coerce middleware-supplied tool selection stats to the wire shape.
+
+    Returns None when the input is unusable so the field is dropped from
+    the wire payload (rather than emitting bad data).
+    """
+    if not isinstance(value, dict):
+        return None
+    mode = str(value.get("mode", "none"))[:32]
+    if mode not in _TOOL_SELECTION_MODES:
+        mode = "none"
+    try:
+        offered = max(0, int(value.get("offered", 0)))
+        kept = max(0, int(value.get("kept", 0)))
+        dropped_relevance = max(0, int(value.get("dropped_relevance", 0)))
+        dropped_denied = max(0, int(value.get("dropped_denied", 0)))
+    except (TypeError, ValueError):
+        return None
+    return {
+        "mode":              mode,
+        "offered":           offered,
+        "kept":              kept,
+        "dropped_relevance": dropped_relevance,
+        "dropped_denied":    dropped_denied,
     }
 
 
